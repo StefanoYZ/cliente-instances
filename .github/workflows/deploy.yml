@@ -31,8 +31,10 @@ jobs:
         env:
           CLIENTE_ID: ${{ github.event.inputs.cliente_id }}
           MODULES: ${{ github.event.inputs.modules }}
-        run: node generator.js
-
+        run: 
+            node generator.js
+            echo "Contenido de dist:"
+            ls -R dist
       # (Opcional) Terraform "sim" (si luego agregas /infra/main.tf)
       - name: Setup Terraform
         if: ${{ always() }}
