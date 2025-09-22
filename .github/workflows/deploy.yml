@@ -1,1 +1,68 @@
+name: Deploy Instance (Pages)
 
+on:
+  workflow_dispatch:
+    inputs:
+      cliente_id:
+        description: "ID del cliente"
+        required: true
+      modules:
+        description: "Lista separada por comas (pago,agenda,calendario,visor de archivos)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate static instance
+        env:
+          CLIENTE_ID: ${{ github.event.inputs.cliente_id }}
+          MODULES: ${{ github.event.inputs.modules }}
+        run: node generator.js
+
+      # (Opcional) Terraform "sim" (si luego agregas /infra/main.tf)
+      - name: Setup Terraform
+        if: ${{ always() }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+      - name: Terraform init/apply (optional)
+        if: ${{ always() }}
+        working-directory: infra
+        continue-on-error: true
+        env:
+          TF_IN_AUTOMATION: true
+        run: |
+          terraform init -input=false || true
+          terraform apply -auto-approve -var="cliente_id=${{ github.event.inputs.cliente_id }}" -var="modules=${{ github.event.inputs.modules }}" || true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
