@@ -1,8 +1,6 @@
 name: Build & Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       cliente_id:
@@ -49,7 +47,6 @@ jobs:
           fi
 
       - name: Generate data/home.json from inputs (workflow_dispatch)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: bash
         run: |
           set -e
