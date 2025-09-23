@@ -38,70 +38,96 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
-      - name: Generate data/home.json from inputs (workflow_dispatch)
+      - name: Generate data/home.json
         shell: bash
         run: |
-          set -e
-
-          CLIENTE_ID='${{ inputs.cliente_id }}'
-          NOMBRE='${{ inputs.nombre }}'
-          ESTADO='${{ inputs.estado }}'
-          MODULES_CSV='${{ inputs.modules }}'  # ej: "agenda,calendario,visor"
-
-          # Lista total de módulos soportados (ajústala si agregas nuevos)
-          ALL_MODULES=("agenda" "calendario" "pago" "visor")
-
-          # Normalizar CSV (quitar espacios y pasar a minúsculas)
-          MODULES_CSV=$(echo "$MODULES_CSV" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
-
-          # Construir objeto "modules" con flags booleanos
-          MODULES_JSON="{"
-          for MOD in "${ALL_MODULES[@]}"; do
-            MODULES_JSON+="\"$MOD\":false,"
-          done
-
-          IFS=',' read -ra SELECTED <<< "$MODULES_CSV"
-          for S in "${SELECTED[@]}"; do
-            if [[ -n "$S" ]]; then
-              MODULES_JSON=$(echo "$MODULES_JSON" | sed "s/\"$S\":false/\"$S\":true/")
-            fi
-          done
-
-          # Cerrar el JSON removiendo la coma final (uso POSIX [:space:])
-          MODULES_JSON=$(echo "$MODULES_JSON" | sed -E 's/,[[:space:]]*$/}/')
-          if [[ "$MODULES_JSON" != *"}" ]]; then MODULES_JSON="${MODULES_JSON}}"; fi
-
-          mkdir -p data
-          YEAR_NOW=$(date +%Y)
-
-          cat > data/home.json <<EOF
-          {
-            "site": {
-              "name": "${NOMBRE}",
-              "year": ${YEAR_NOW},
-              "cliente_id": "${CLIENTE_ID}"
-            },
-            "page": {
-              "title": "Inicio",
-              "desc": "Página generada dinámicamente con Handlebars"
-            },
-            "modules": ${MODULES_JSON},
-            "metadata": {
-              "estado": "${ESTADO}"
+            set -e
+  
+            # 1) Leer inputs (siempre string)
+            CLIENTE_ID='${{ inputs.cliente_id }}'
+            NOMBRE='${{ inputs.nombre }}'
+            ESTADO='${{ inputs.estado }}'
+            MODULES_RAW='${{ inputs.modules }}'   # puede venir "pago,visor de archivos" o similar
+  
+            # 2) Sanitizar: quitar espacios extremos y cualquier guion/lixo inicial accidental
+            trim() { echo "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'; }
+            clean_head() { echo "$1" | sed -E 's/^[^[:alnum:]]+//'; }  # quita guiones u otros al principio
+  
+            CLIENTE_ID=$(clean_head "$(trim "$CLIENTE_ID")")
+            NOMBRE=$(clean_head "$(trim "$NOMBRE")")
+            ESTADO=$(clean_head "$(trim "$ESTADO")")
+            MODULES_RAW=$(trim "$MODULES_RAW")
+  
+            # 3) Normalizar módulos -> array de tokens en minúsculas
+            IFS=',' read -ra TOKENS <<< "$(echo "$MODULES_RAW" | tr '[:upper:]' '[:lower:]')"
+  
+            # 4) Sinónimos / mapping (ajusta a tus textos reales)
+            map_synonym() {
+              local t="$(echo "$1" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+              t="$(echo "$t" | sed -E 's/[[:space:]]+/ /g')"   # colapsa espacios internos
+              case "$t" in
+                "visor"|"visor archivos"|"visor de archivos"|"file viewer") echo "visor" ;;
+                "calendario"|"calendar") echo "calendario" ;;
+                "pago"|"pagos"|"payment"|"payments") echo "pago" ;;
+                "agenda"|"schedule") echo "agenda" ;;
+                *) echo "$t" ;;  # por defecto tal cual
+              esac
             }
-          }
-          EOF
-
-          echo "Generated data/home.json:"
-          cat data/home.json
+  
+            # 5) Inicializar flags
+            ALL_MODULES=("agenda" "calendario" "pago" "visor")
+            MODULES_JSON="{"
+            for MOD in "${ALL_MODULES[@]}"; do
+              MODULES_JSON+="\"$MOD\":false,"
+            done
+  
+            # 6) Marcar verdaderos según tokens mapeados
+            for raw in "${TOKENS[@]}"; do
+              [ -z "$raw" ] && continue
+              tok="$(map_synonym "$raw")"
+              # Si el token está en la lista, actívalo
+              for MOD in "${ALL_MODULES[@]}"; do
+                if [[ "$tok" == "$MOD" ]]; then
+                  MODULES_JSON=$(echo "$MODULES_JSON" | sed "s/\"$MOD\":false/\"$MOD\":true/")
+                fi
+              done
+            done
+  
+            # 7) Cerrar JSON de módulos
+            MODULES_JSON=$(echo "$MODULES_JSON" | sed -E 's/,[[:space:]]*$/}/')
+            if [[ "$MODULES_JSON" != *"}" ]]; then MODULES_JSON="${MODULES_JSON}}"; fi
+  
+            mkdir -p data
+            YEAR_NOW=$(date +%Y)
+  
+            # 8) Construir home.json
+            cat > data/home.json <<EOF
+            {
+              "site": {
+                "name": "${NOMBRE}",
+                "year": ${YEAR_NOW},
+                "cliente_id": "${CLIENTE_ID}"
+              },
+              "page": {
+                "title": "Inicio",
+                "desc": "Página generada dinámicamente con Handlebars"
+              },
+              "modules": ${MODULES_JSON},
+              "metadata": {
+                "estado": "${ESTADO}"
+              }
+            }
+            EOF
+  
+            echo "Inputs normalizados:"
+            echo "  cliente_id=${CLIENTE_ID}"
+            echo "  nombre=${NOMBRE}"
+            echo "  estado=${ESTADO}"
+            echo "  modules_raw=${MODULES_RAW}"
+            echo "  modules_flags=${MODULES_JSON}"
+            echo "Generated data/home.json:"
+            cat data/home.json
+  
 
       - name: Build site (generate dist)
         run: npm run build
