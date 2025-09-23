@@ -1,56 +1,74 @@
-name: Build & Deploy to GitHub Pages
-
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      cliente_id:
+        description: "Identificador único del cliente"
+        required: true
+      nombre:
+        description: "Nombre del cliente (site.name)"
+        required: true
+      estado:
+        description: "Estado del proyecto (ej: borrador, activo)"
+        required: true
+      modules:
+        description: "CSV de módulos activos (ej: agenda,calendario,visor)"
+        required: true
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# ... (permissions, concurrency, jobs: build ...)
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install dependencies
+      - name: Generate data/home.json from inputs (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          set -e
 
-      - name: Build site (generate dist)
-        run: npm run build
+          CLIENTE_ID='${{ inputs.cliente_id }}'
+          NOMBRE='${{ inputs.nombre }}'
+          ESTADO='${{ inputs.estado }}'
+          MODULES_CSV='${{ inputs.modules }}'  # ej: "agenda,calendario,visor"
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+          # Lista total de módulos soportados (ajústala si agregas nuevos)
+          ALL_MODULES=("agenda" "calendario" "pago" "visor")
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          # Normalizar CSV (quitar espacios)
+          MODULES_CSV=$(echo "$MODULES_CSV" | tr -d ' ')
+
+          # Construir objeto "modules" con flags booleanos
+          MODULES_JSON="{"
+          for MOD in "${ALL_MODULES[@]}"; do
+            MODULES_JSON+="\"$MOD\":false,"
+          done
+          IFS=',' read -ra SELECTED <<< "$MODULES_CSV"
+          for S in "${SELECTED[@]}"; do
+            if [[ -n "$S" ]]; then
+              MODULES_JSON=$(echo "$MODULES_JSON" | sed "s/\"$S\":false/\"$S\":true/")
+            fi
+          done
+          MODULES_JSON=$(echo "$MODULES_JSON" | sed 's/,\s*$/}/')
+          if [[ "$MODULES_JSON" != *"}" ]]; then MODULES_JSON="${MODULES_JSON}}"; fi
+
+          mkdir -p data
+          YEAR_NOW=$(date +%Y)
+
+          cat > data/home.json <<EOF
+{
+  "site": {
+    "name": "${NOMBRE}",
+    "year": ${YEAR_NOW},
+    "cliente_id": "${CLIENTE_ID}"
+  },
+  "page": {
+    "title": "Inicio",
+    "desc": "Página generada dinámicamente con Handlebars"
+  },
+  "modules": ${MODULES_JSON},
+  "metadata": {
+    "estado": "${ESTADO}"
+  }
+}
+EOF
+
+          echo "Generated data/home.json:"
+          cat data/home.json
