@@ -1,60 +1,45 @@
-name: Deploy Instance (Pages)
+name: Build & Deploy to GitHub Pages
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      cliente_id:
-        description: "ID del cliente"
-        required: true
-      modules:
-        description: "Lista separada por comas (pago,agenda,calendario,visor de archivos)"
-        required: false
-        default: ""
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Generate static instance
-        env:
-          CLIENTE_ID: ${{ github.event.inputs.cliente_id }}
-          MODULES: ${{ github.event.inputs.modules }}
-        run: 
-            node generator.js
-            echo "Contenido de dist:"
-            ls -R dist
-      # (Opcional) Terraform "sim" (si luego agregas /infra/main.tf)
-      - name: Setup Terraform
-        if: ${{ always() }}
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-      - name: Terraform init/apply (optional)
-        if: ${{ always() }}
-        working-directory: infra
-        continue-on-error: true
-        env:
-          TF_IN_AUTOMATION: true
+      - name: Install dependencies
         run: |
-          terraform init -input=false || true
-          terraform apply -auto-approve -var="cliente_id=${{ github.event.inputs.cliente_id }}" -var="modules=${{ github.event.inputs.modules }}" || true
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Build site (generate dist)
+        run: npm run build
 
-      - name: Upload artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -66,5 +51,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
