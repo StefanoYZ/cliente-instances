@@ -1,3 +1,5 @@
+name: Build & Deploy to GitHub Pages
+
 on:
   push:
     branches: [ main ]
@@ -16,8 +18,37 @@ on:
         description: "CSV de módulos activos (ej: agenda,calendario,visor)"
         required: true
 
-# ... (permissions, concurrency, jobs: build ...)
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      # 👇 Si vienen inputs, generamos data/home.json con esos inputs.
       - name: Generate data/home.json from inputs (workflow_dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: bash
@@ -72,3 +103,22 @@ EOF
 
           echo "Generated data/home.json:"
           cat data/home.json
+
+      - name: Build site (generate dist)
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
