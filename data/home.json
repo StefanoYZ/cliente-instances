@@ -1,0 +1,17 @@
+{
+    "site": {
+      "name": "Cliente Demo",
+      "year": 2025
+    },
+    "page": {
+      "title": "Inicio",
+      "desc": "Página generada dinámicamente con Handlebars"
+    },
+    "modules": {
+      "agenda": true,
+      "calendario": false,
+      "pago": true,
+      "visor": true
+    }
+  }
+  

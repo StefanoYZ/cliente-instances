@@ -1,0 +1,5 @@
+body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 24px; }
+header, footer { background: #f3f3f3; padding: 16px; border-radius: 8px; }
+main { margin: 16px 0; display: grid; gap: 16px; }
+section { padding: 16px; border: 1px solid #e5e5e5; border-radius: 8px; }
+button { padding: 8px 12px; border: 0; border-radius: 6px; cursor: pointer; }

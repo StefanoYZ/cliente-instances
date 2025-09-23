@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{page.title}}</title>
+    <meta name="description" content="{{page.desc}}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <link rel="icon" href="./assets/favicon.ico" />
+
+  </head>
+  <body>
+    <header>
+      <h1>{{site.name}}</h1>
+    </header>
+
+    <main>
+      {{{body}}}   {{!-- aquí se inyecta el contenido de cada página --}}
+    </main>
+
+    <footer>
+      <p>&copy; {{site.year}} - {{site.name}}</p>
+    </footer>
+  </body>
+</html>

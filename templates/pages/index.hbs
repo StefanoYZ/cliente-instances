@@ -1,0 +1,19 @@
+{{!-- templates/pages/index.hbs --}}
+
+<h2>Bienvenido a {{site.name}}</h2>
+
+{{#if modules.agenda}}
+  {{> agenda}}
+{{/if}}
+
+{{#if modules.calendario}}
+  {{> calendario}}
+{{/if}}
+
+{{#if modules.pago}}
+  {{> pago}}
+{{/if}}
+
+{{#if modules.visor}}
+  {{> visor}}
+{{/if}}
