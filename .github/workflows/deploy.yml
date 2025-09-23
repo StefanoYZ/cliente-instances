@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: |
@@ -48,62 +48,63 @@ jobs:
             npm install
           fi
 
-- name: Generate data/home.json from inputs (workflow_dispatch)
-  if: ${{ github.event_name == 'workflow_dispatch' }}
-  shell: bash
-  run: |
-    set -e
+      - name: Generate data/home.json from inputs (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          set -e
 
-    CLIENTE_ID='${{ inputs.cliente_id }}'
-    NOMBRE='${{ inputs.nombre }}'
-    ESTADO='${{ inputs.estado }}'
-    MODULES_CSV='${{ inputs.modules }}'  # ej: "agenda,calendario,visor"
+          CLIENTE_ID='${{ inputs.cliente_id }}'
+          NOMBRE='${{ inputs.nombre }}'
+          ESTADO='${{ inputs.estado }}'
+          MODULES_CSV='${{ inputs.modules }}'  # ej: "agenda,calendario,visor"
 
-    # Lista total de módulos soportados (ajústala si agregas nuevos)
-    ALL_MODULES=("agenda" "calendario" "pago" "visor")
+          # Lista total de módulos soportados (ajústala si agregas nuevos)
+          ALL_MODULES=("agenda" "calendario" "pago" "visor")
 
-    # Normalizar CSV (quitar espacios y bajar a minúsculas)
-    MODULES_CSV=$(echo "$MODULES_CSV" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+          # Normalizar CSV (quitar espacios y pasar a minúsculas)
+          MODULES_CSV=$(echo "$MODULES_CSV" | tr -d ' ' | tr '[:upper:]' '[:lower:]')
 
-    # Construir objeto "modules" con flags booleanos
-    MODULES_JSON="{"
-    for MOD in "${ALL_MODULES[@]}"; do
-      MODULES_JSON+="\"$MOD\":false,"
-    done
-    IFS=',' read -ra SELECTED <<< "$MODULES_CSV"
-    for S in "${SELECTED[@]}"; do
-      if [[ -n "$S" ]]; then
-        MODULES_JSON=$(echo "$MODULES_JSON" | sed "s/\"$S\":false/\"$S\":true/")
-      fi
-    done
-    MODULES_JSON=$(echo "$MODULES_JSON" | sed 's/,\s*$/}/')
-    if [[ "$MODULES_JSON" != *"}" ]]; then MODULES_JSON="${MODULES_JSON}}"; fi
+          # Construir objeto "modules" con flags booleanos
+          MODULES_JSON="{"
+          for MOD in "${ALL_MODULES[@]}"; do
+            MODULES_JSON+="\"$MOD\":false,"
+          done
 
-    mkdir -p data
-    YEAR_NOW=$(date +%Y)
+          IFS=',' read -ra SELECTED <<< "$MODULES_CSV"
+          for S in "${SELECTED[@]}"; do
+            if [[ -n "$S" ]]; then
+              MODULES_JSON=$(echo "$MODULES_JSON" | sed "s/\"$S\":false/\"$S\":true/")
+            fi
+          done
 
-    # IMPORTANTE: el 'EOF' de cierre va solo y con la misma indentación
-    cat > data/home.json <<EOF
-{
-  "site": {
-    "name": "${NOMBRE}",
-    "year": ${YEAR_NOW},
-    "cliente_id": "${CLIENTE_ID}"
-  },
-  "page": {
-    "title": "Inicio",
-    "desc": "Página generada dinámicamente con Handlebars"
-  },
-  "modules": ${MODULES_JSON},
-  "metadata": {
-    "estado": "${ESTADO}"
-  }
-}
-EOF
+          # Cerrar el JSON removiendo la coma final (uso POSIX [:space:])
+          MODULES_JSON=$(echo "$MODULES_JSON" | sed -E 's/,[[:space:]]*$/}/')
+          if [[ "$MODULES_JSON" != *"}" ]]; then MODULES_JSON="${MODULES_JSON}}"; fi
 
-    echo "Generated data/home.json:"
-    cat data/home.json
+          mkdir -p data
+          YEAR_NOW=$(date +%Y)
 
+          cat > data/home.json <<EOF
+          {
+            "site": {
+              "name": "${NOMBRE}",
+              "year": ${YEAR_NOW},
+              "cliente_id": "${CLIENTE_ID}"
+            },
+            "page": {
+              "title": "Inicio",
+              "desc": "Página generada dinámicamente con Handlebars"
+            },
+            "modules": ${MODULES_JSON},
+            "metadata": {
+              "estado": "${ESTADO}"
+            }
+          }
+          EOF
+
+          echo "Generated data/home.json:"
+          cat data/home.json
 
       - name: Build site (generate dist)
         run: npm run build
